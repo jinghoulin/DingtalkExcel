@@ -8,115 +8,153 @@ const bugFirstRow = bugSheet.getRange('1:1')
 const levelColumnIndex = bugFirstRow.find("严重程度").getColumn()
 const titleColumnIndex = bugFirstRow.find("Bug标题").getColumn()
 const keywordColumnIndex = bugFirstRow.find("关键词").getColumn()
+const creatDateColumnIndex = bugFirstRow.find("创建日期").getColumn()
 
-const filteredData = [];
+const newDataArray = [];
 const rowCount = bugSheet.getRowCount();
 const colCount = 14;
+const nowDate = new Date();
+const colorRed = "#fe0300";
+const colorOrange = "#fcc102";
+const colorYellow = "#feff00";
 
-addKeyRules()
-
-// 每行记录符合重点问题的判定结果
-function addKeyRules(){
-    const bugRowCount = firstNullRowIndex(bugSheet);
-    for(let i=1; i<bugRowCount; i++){
-        var result = false;
-
-        // 严重程度
-        const levelValue = bugSheet.getRange(i, levelColumnIndex, 1, 1).getValue();
-        if(levelValue){
-            const levelResult = bugSheet.getRange(i, levelColumnIndex, 1, 1).getValue() <= conditionSheet.getRange('A2').getValue()
-            bugSheet.getRange(i, keyRulesColumnIndex, 1, 1).setValue(levelResult)
-            if(levelResult) result = true;
-        }else{
-            bugSheet.getRange(i, keyRulesColumnIndex, 1, 1).setValue(false)
-        }
-        // 标题
-        const titleValue = bugSheet.getRange(i, titleColumnIndex, 1, 1).getValue()
-        if(titleValue){
-            var titleResult = false;
-            const titleCondition = conditionSheet.getRange('B2').getValue().toString().split("，");
-            if(titleCondition.find(item => titleValue.includes(item))){
-                titleResult = true;
-            }
-            bugSheet.getRange(i, keyRulesColumnIndex+1, 1, 1).setValue(titleResult)
-            if(titleResult) result = true;
-        }else{
-            bugSheet.getRange(i, keyRulesColumnIndex+1, 1, 1).setValue(false)
-        }
-        // 关键词
-        const keywordValue = bugSheet.getRange(i, keywordColumnIndex, 1, 1).getValue()
-        if(keywordValue){
-            var keywordResult = false;
-            const keywordCondition = conditionSheet.getRange('C2').getValue().toString().split("，");
-            if(keywordCondition.find(item => keywordValue.includes(item))){
-                keywordResult = true;
-            }
-            bugSheet.getRange(i, keyRulesColumnIndex+2, 1, 1).setValue(keywordResult)
-            if(keywordResult) result = true;
-        }else{
-            bugSheet.getRange(i, keyRulesColumnIndex+2, 1, 1).setValue(false)
-        }
-
-        // 记录最终判定结果
-        bugSheet.getRange(i, keyRulesColumnIndex+3, 1, 1).setValue(result)
-        if(!result) continue;
-        
-        const bugIdValue = bugSheet.getRange(i, 0, 1, 1).getValue()
-        const findRange = keyBugSheet.getRange(0, 0, rowCount, 1).find(bugIdValue.toString())
-        // keyBugSheet中若第1列中存在此BugId，则直接更新到此行
-        if(findRange){
-            updateRow(bugSheet, i, keyBugSheet, findRange.getRow());
-            continue;
-        }
-        // 保存keyBugSheet中不存在的新数据
-        const rowData = bugSheet.getRange(i, 0, 1, colCount).getValues()[0];
-        // Output.log(rowData)
-        filteredData.push(rowData);
+// 轮询sourceSheet的每一行
+const bugRowCount = getNotNullRowCount(bugSheet);
+for (let i = 1; i < bugRowCount; i++) {
+    // 若不符合重点问题条件，则跳过
+    if (!matchKeyRules(bugSheet, i)) continue;
+    // 若keyBugSheet中存在此BugId，则直接更新数据
+    const bugIdValue = bugSheet.getRange(i, 0, 1, 1).getValue()
+    const findRange = keyBugSheet.getRange(0, 0, rowCount, 1).find(bugIdValue.toString())
+    if (findRange) {
+        updateRow(bugSheet, i, keyBugSheet, findRange.getRow());
+        continue;
     }
+    // 将一行数据暂存到数组
+    addRowToArray(bugSheet, i, keyBugSheet);
+}
+// 将暂存的所有行追加到keyBugSheet
+appendArrayToSheet(keyBugSheet);
 
+// 轮询targetSheet的每一行
+const keyBugRowCount = getNotNullRowCount(keyBugSheet);
+for (let i = 1; i <= keyBugRowCount; i++) {
+    // 添加存活时间颜色
+    addAliveColors(keyBugSheet, i);
 }
 
-if (filteredData.length === 0) {
-    Output.log("没有新增的（重点问题）数据");
-    // return;
-}else{
-    Output.log("filteredData lenthg="+filteredData.length)
-    appendValues(filteredData, keyBugSheet)
-}
 
 keyBugSheet.setRowsHeight(0, keyBugSheet.getRowCount(), 22);
+// -------------------------functions-------------------------
 
-// 追加数据到空行
-function appendValues(values, targetSheet){
-    targetSheet.getRange(firstNullRowIndex(targetSheet), 0, filteredData.length, filteredData[0].length).setValues(filteredData)
-    Output.log(`共复制 ${filteredData.length} 行数据到 "${keyBugSheet.getName()}"`);
+function appendArrayToSheet(targetSheet) {
+    if (newDataArray.length === 0) {
+        Output.log("没有新增的（重点问题）数据");
+    } else {
+        Output.log("filteredData lenthg=" + newDataArray.length)
+        appendValues(newDataArray, targetSheet)
+    }
 }
 
-// 获取第一个空行
-function firstNullRowIndex(sheet){
-    var index = 0;
-    for(; index < sheet.getRowCount(); index++){
+function addRowToArray(sourceSheet, sourceRowIndex) {
+    // 保存keyBugSheet中不存在的新数据
+    const rowData = sourceSheet.getRange(sourceRowIndex, 0, 1, colCount).getValues()[0];
+    newDataArray.push(rowData);
+    // Output.log(rowData)
+}
+
+// 添加重点问题规则的判定结果，并return
+function matchKeyRules(sheet, index) {
+    var result = false;
+
+    // 严重程度
+    const levelValue = sheet.getRange(index, levelColumnIndex, 1, 1).getValue();
+    if (levelValue) {
+        const levelResult = sheet.getRange(index, levelColumnIndex, 1, 1).getValue() <= conditionSheet.getRange('A2').getValue()
+        sheet.getRange(index, keyRulesColumnIndex, 1, 1).setValue(levelResult)
+        if (levelResult) result = true;
+    } else {
+        sheet.getRange(index, keyRulesColumnIndex, 1, 1).setValue(false)
+    }
+    // 标题
+    const titleValue = sheet.getRange(index, titleColumnIndex, 1, 1).getValue()
+    if (titleValue) {
+        var titleResult = false;
+        const titleCondition = conditionSheet.getRange('B2').getValue().toString().split("，");
+        if (titleCondition.find(item => titleValue.includes(item))) {
+            titleResult = true;
+        }
+        sheet.getRange(index, keyRulesColumnIndex + 1, 1, 1).setValue(titleResult)
+        if (titleResult) result = true;
+    } else {
+        sheet.getRange(index, keyRulesColumnIndex + 1, 1, 1).setValue(false)
+    }
+    // 关键词
+    const keywordValue = sheet.getRange(index, keywordColumnIndex, 1, 1).getValue()
+    if (keywordValue) {
+        var keywordResult = false;
+        const keywordCondition = conditionSheet.getRange('C2').getValue().toString().split("，");
+        if (keywordCondition.find(item => keywordValue.includes(item))) {
+            keywordResult = true;
+        }
+        sheet.getRange(index, keyRulesColumnIndex + 2, 1, 1).setValue(keywordResult)
+        if (keywordResult) result = true;
+    } else {
+        sheet.getRange(index, keyRulesColumnIndex + 2, 1, 1).setValue(false)
+    }
+    // 记录最终判定结果
+    sheet.getRange(index, keyRulesColumnIndex + 3, 1, 1).setValue(result)
+
+    return result;
+}
+
+// 根据bug存活时间添加颜色
+function addAliveColors(sheet, index) {
+    // 计算存活时间。空白行的日期为1970-01-01
+    const createDateValue = new Date(sheet.getRange(index, creatDateColumnIndex, 1, 1).getValue());
+    const aliveDays = parseInt((nowDate - createDateValue) / (1000 * 60 * 60 * 24));
+    // Output.log(`index=${index}, createDateValue=${createDateValue}, aliveDays=${aliveDays}`)
+    if (aliveDays > 15) {
+        sheet.getRange(index, creatDateColumnIndex, 1, 1).setBackgroundColor(colorRed)
+    } else if (aliveDays > 10) {
+        sheet.getRange(index, creatDateColumnIndex, 1, 1).setBackgroundColor(colorOrange)
+    } else if (aliveDays > 5) {
+        sheet.getRange(index, creatDateColumnIndex, 1, 1).setBackgroundColor(colorYellow)
+    }
+}
+
+// 追加数据到空行
+function appendValues(values, targetSheet) {
+    targetSheet.getRange(getNotNullRowCount(targetSheet), 0, values.length, values[0].length).setValues(values, { parseType: 'raw' })
+    Output.log(`共复制 ${values.length} 行数据到 "${keyBugSheet.getName()}"`);
+}
+
+// 获取有效行的count，也是第一个空行的index
+function getNotNullRowCount(sheet) {
+    var count = 0;
+    for (; count < sheet.getRowCount(); count++) {
         // 第1列和第2列都为null，则判定为空行
-        if(sheet.getRange(index, 0, 1, 1).getValue()==null && sheet.getRange(index, 1, 1, 1).getValue()==null){
+        if (sheet.getRange(count, 0, 1, 1).getValue() == null && sheet.getRange(count, 1, 1, 1).getValue() == null) {
             break;
         }
     }
-    Output.log(sheet.getName()+" firstNullRowIndex: "+index)
-    return index;
+    Output.log("getNotNullRowCount: " + count + " " + sheet.getName())
+    return count;
 }
 
 // 将1行更新到指定行
-function updateRow(sourceSheet, sourceRowIndex, targetSheet, targetRowIndex){
+function updateRow(sourceSheet, sourceRowIndex, targetSheet, targetRowIndex) {
     const targetRange = targetSheet.getRange(targetRowIndex, 0, 1, colCount)
     const sourceRange = sourceSheet.getRange(sourceRowIndex, 0, 1, colCount)
-    targetRange.setValues(sourceRange.getValues())
+    targetRange.setValues(sourceRange.getValues(),{ parseType: 'raw' })
     // Output.log("updateRow: "+targetSheet.getName()+"->"+targetRowIndex)
 }
 
 // 打印对象的类型（钉钉API很多没有重写toString）
-function printType(obj){
+function printType(obj) {
     Output.log(Object.prototype.toString.call(obj))
 }
+
 
 
 // const originSheet = Workbook.getSheet("bug原始数据");
@@ -132,9 +170,6 @@ function printType(obj){
 // const filter = originSheet.getFilter();
 // filter.setColumnFilterCriteria(3, criteria);
 
-// bugSheet.setRowsHeight(0,600,20)
-// bugSheet.setFrozenRowCount(1)
-
 // var filter=bugSheet.getFilter()
 // if(filter){
 //     bugSheet.deleteFilter()
@@ -149,7 +184,6 @@ function printType(obj){
 // const criteria = Workbook.newFilterCriteriaBuilder().setVisibleConditions(filterCondition1).build()
 // filter.setColumnFilterCriteria(levelColumnIndex, criteria)
 
-
 // // 筛选后复制
 // const rangeValue = 'A1:N600'
 // // bugSheet.setActiveRange(rangeValue)
@@ -157,9 +191,7 @@ function printType(obj){
 // // Output.log(bugSheet.getActiveRangeList())
 // // keyBugSheet.getRange(rangeValue).setValues(bugSheet.getActiveRange().getValues())
 
-
 // const startRow = 0;
-
 
 // // 遍历所有行，筛选出未被隐藏的行（即筛选结果中的行）
 // for (let row = startRow; row < rowCount; row++) {
