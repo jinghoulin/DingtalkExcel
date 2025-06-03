@@ -38,7 +38,7 @@ appendArrayToSheet(keyBugSheet);
 
 // 轮询targetSheet的每一行
 const keyBugRowCount = getNotNullRowCount(keyBugSheet);
-for (let i = 1; i <= keyBugRowCount; i++) {
+for (let i = 1; i < keyBugRowCount; i++) {
     // 添加存活时间颜色
     addAliveColors(keyBugSheet, i);
 }
@@ -138,7 +138,7 @@ function getNotNullRowCount(sheet) {
             break;
         }
     }
-    Output.log("getNotNullRowCount: " + count + " " + sheet.getName())
+    Output.log(`getNotNullRowCount: ${sheet.getName()}sheet 有效行数=${count}`);
     return count;
 }
 
