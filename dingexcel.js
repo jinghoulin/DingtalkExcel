@@ -43,7 +43,7 @@ for (let i = 1; i < keyBugRowCount; i++) {
     addAliveColors(keyBugSheet, i);
 }
 
-
+bugSheet.setRowsHeight(0, bugSheet.getRowCount(), 22);
 keyBugSheet.setRowsHeight(0, keyBugSheet.getRowCount(), 22);
 // -------------------------functions-------------------------
 
