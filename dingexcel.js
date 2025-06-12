@@ -1,8 +1,8 @@
 const bugSheet = Workbook.getSheet('禅道bug数据')
 const conditionSheet = Workbook.getSheet("重点问题-筛选条件")
 const keyBugSheet = Workbook.getSheet("重点问题")
-
-const keyRulesColumnIndex = 24;// 禅道bug的默认模版有23列
+// bug原始数据的列数
+const bugOriginColCount = 14;
 
 const bugFirstRow = bugSheet.getRange('1:1')
 const levelColumnIndex = bugFirstRow.find("严重程度").getColumn()
@@ -12,7 +12,6 @@ const creatDateColumnIndex = bugFirstRow.find("创建日期").getColumn()
 
 const newDataArray = [];
 const rowCount = bugSheet.getRowCount();
-const colCount = 14;
 const nowDate = new Date();
 const colorRed = "#fe0300";
 const colorOrange = "#fcc102";
@@ -20,24 +19,36 @@ const colorYellow = "#feff00";
 
 // 轮询sourceSheet的每一行
 const bugRowCount = getNotNullRowCount(bugSheet);
+var isMatchKeyRules = false;
 for (let i = 1; i < bugRowCount; i++) {
-    // 若不符合重点问题条件，则跳过
-    if (!matchKeyRules(bugSheet, i)) continue;
+    // 匹配重点问题，并获取匹配结果
+    isMatchKeyRules = matchKeyRules(bugSheet, i);
+
     // 若keyBugSheet中存在此BugId，则直接更新数据
-    const bugIdValue = bugSheet.getRange(i, 0, 1, 1).getValue()
-    const findRange = keyBugSheet.getRange(0, 0, rowCount, 1).find(bugIdValue.toString())
+    const bugId = bugSheet.getRange(i, 0, 1, 1).getValue()
+    const findRange = keyBugSheet.getRange(0, 0, rowCount, 1).find(bugId.toString())
     if (findRange) {
-        updateRow(bugSheet, i, keyBugSheet, findRange.getRow());
-        continue;
+        if (!isMatchKeyRules) {// 删除keyBugSheet中不符合重点问题条件的行
+            if (findRange.getRow() != 0) {// 第0行是标题行
+                keyBugSheet.deleteRow(findRange.getRow());
+                Output.log(`keyBugSheet delete row, bugId=${bugId}`)
+            }
+        } else {// 更新keyBugSheet中符合重点问题条件的行
+            updateRow(bugSheet, i, keyBugSheet, findRange.getRow());
+            Output.log(`keyBugSheet update row, bugId=${bugId}`)
+        }
+    } else {
+        if (isMatchKeyRules) {
+            // 将一行数据暂存到数组
+            addRowToArray(bugSheet, i, keyBugSheet);
+        }
     }
-    // 将一行数据暂存到数组
-    addRowToArray(bugSheet, i, keyBugSheet);
 }
 // 将暂存的所有行追加到keyBugSheet
 appendArrayToSheet(keyBugSheet);
 
 // 轮询targetSheet的每一行
-const keyBugRowCount = getNotNullRowCount(keyBugSheet);
+var keyBugRowCount = getNotNullRowCount(keyBugSheet);
 for (let i = 1; i < keyBugRowCount; i++) {
     // 添加存活时间颜色
     addAliveColors(keyBugSheet, i);
@@ -58,7 +69,7 @@ function appendArrayToSheet(targetSheet) {
 
 function addRowToArray(sourceSheet, sourceRowIndex) {
     // 保存keyBugSheet中不存在的新数据
-    const rowData = sourceSheet.getRange(sourceRowIndex, 0, 1, colCount).getValues()[0];
+    const rowData = sourceSheet.getRange(sourceRowIndex, 0, 1, bugOriginColCount).getValues()[0];
     newDataArray.push(rowData);
     // Output.log(rowData)
 }
@@ -71,10 +82,10 @@ function matchKeyRules(sheet, index) {
     const levelValue = sheet.getRange(index, levelColumnIndex, 1, 1).getValue();
     if (levelValue) {
         const levelResult = sheet.getRange(index, levelColumnIndex, 1, 1).getValue() <= conditionSheet.getRange('A2').getValue()
-        sheet.getRange(index, keyRulesColumnIndex, 1, 1).setValue(levelResult)
+        sheet.getRange(index, bugOriginColCount, 1, 1).setValue(levelResult)
         if (levelResult) result = true;
     } else {
-        sheet.getRange(index, keyRulesColumnIndex, 1, 1).setValue(false)
+        sheet.getRange(index, bugOriginColCount, 1, 1).setValue(false)
     }
     // 标题
     const titleValue = sheet.getRange(index, titleColumnIndex, 1, 1).getValue()
@@ -84,10 +95,10 @@ function matchKeyRules(sheet, index) {
         if (titleCondition.find(item => titleValue.includes(item))) {
             titleResult = true;
         }
-        sheet.getRange(index, keyRulesColumnIndex + 1, 1, 1).setValue(titleResult)
+        sheet.getRange(index, bugOriginColCount + 1, 1, 1).setValue(titleResult)
         if (titleResult) result = true;
     } else {
-        sheet.getRange(index, keyRulesColumnIndex + 1, 1, 1).setValue(false)
+        sheet.getRange(index, bugOriginColCount + 1, 1, 1).setValue(false)
     }
     // 关键词
     const keywordValue = sheet.getRange(index, keywordColumnIndex, 1, 1).getValue()
@@ -97,13 +108,13 @@ function matchKeyRules(sheet, index) {
         if (keywordCondition.find(item => keywordValue.includes(item))) {
             keywordResult = true;
         }
-        sheet.getRange(index, keyRulesColumnIndex + 2, 1, 1).setValue(keywordResult)
+        sheet.getRange(index, bugOriginColCount + 2, 1, 1).setValue(keywordResult)
         if (keywordResult) result = true;
     } else {
-        sheet.getRange(index, keyRulesColumnIndex + 2, 1, 1).setValue(false)
+        sheet.getRange(index, bugOriginColCount + 2, 1, 1).setValue(false)
     }
     // 记录最终判定结果
-    sheet.getRange(index, keyRulesColumnIndex + 3, 1, 1).setValue(result)
+    sheet.getRange(index, bugOriginColCount + 3, 1, 1).setValue(result)
 
     return result;
 }
@@ -144,9 +155,9 @@ function getNotNullRowCount(sheet) {
 
 // 将1行更新到指定行
 function updateRow(sourceSheet, sourceRowIndex, targetSheet, targetRowIndex) {
-    const targetRange = targetSheet.getRange(targetRowIndex, 0, 1, colCount)
-    const sourceRange = sourceSheet.getRange(sourceRowIndex, 0, 1, colCount)
-    targetRange.setValues(sourceRange.getValues(),{ parseType: 'raw' })
+    const targetRange = targetSheet.getRange(targetRowIndex, 0, 1, bugOriginColCount)
+    const sourceRange = sourceSheet.getRange(sourceRowIndex, 0, 1, bugOriginColCount)
+    targetRange.setValues(sourceRange.getValues(), { parseType: 'raw' })
     // Output.log("updateRow: "+targetSheet.getName()+"->"+targetRowIndex)
 }
 
