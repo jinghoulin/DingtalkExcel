@@ -17,6 +17,16 @@ const colorRed = "#fe0300";
 const colorOrange = "#fcc102";
 const colorYellow = "#feff00";
 
+// 清除筛选，才能读取到全部数据
+if(keyBugSheet.getFilter()){
+    keyBugSheet.getFilter().delete();
+}
+if(bugSheet.getFilter()){
+    bugSheet.getFilter().delete();
+}
+// 在第1行重新添加筛选，方便脚本运行后自行筛选
+keyBugSheet.filter('1:1');
+
 // 轮询sourceSheet的每一行
 const bugRowCount = getNotNullRowCount(bugSheet);
 var isMatchKeyRules = false;
