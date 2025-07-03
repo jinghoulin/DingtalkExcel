@@ -18,14 +18,20 @@ const colorOrange = "#fcc102";
 const colorYellow = "#feff00";
 
 // 清除筛选，才能读取到全部数据
-if(keyBugSheet.getFilter()){
+if (keyBugSheet.getFilter()) {
     keyBugSheet.getFilter().delete();
 }
-if(bugSheet.getFilter()){
+if (bugSheet.getFilter()) {
     bugSheet.getFilter().delete();
 }
 // 在第1行重新添加筛选，方便脚本运行后自行筛选
-keyBugSheet.filter('1:1');
+// 目前用'1:1'这个Range会报错，所以暂时改成'A1:S1'
+keyBugSheet.filter('A1:S1');
+
+// 添加筛选结果的标题行
+bugSheet.getRange(0, bugOriginColCount, 1, 4).setValues([
+    ["条件-严重程度", "条件-标题", "条件-关键词", "条件结果-或"],
+]);
 
 // 轮询sourceSheet的每一行
 const bugRowCount = getNotNullRowCount(bugSheet);
@@ -66,6 +72,8 @@ for (let i = 1; i < keyBugRowCount; i++) {
 
 bugSheet.setRowsHeight(0, bugSheet.getRowCount(), 22);
 keyBugSheet.setRowsHeight(0, keyBugSheet.getRowCount(), 22);
+
+
 // -------------------------functions-------------------------
 
 function appendArrayToSheet(targetSheet) {
