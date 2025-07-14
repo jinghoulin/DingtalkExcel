@@ -24,9 +24,11 @@ if (keyBugSheet.getFilter()) {
 if (bugSheet.getFilter()) {
     bugSheet.getFilter().delete();
 }
+
+// 给sheet添加筛选之前，先激活sheet。否则会报错"Cannot create a filter with other sheet's range"
+keyBugSheet.activate();
 // 在第1行重新添加筛选，方便脚本运行后自行筛选
-// 目前用'1:1'这个Range会报错，所以暂时改成'A1:S1'
-keyBugSheet.filter('A1:S1');
+keyBugSheet.filter('1:1');
 
 // 添加筛选结果的标题行
 bugSheet.getRange(0, bugOriginColCount, 1, 4).setValues([
