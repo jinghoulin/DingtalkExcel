@@ -1,79 +1,99 @@
-const bugSheet = Workbook.getSheet('禅道bug数据')
-const conditionSheet = Workbook.getSheet("重点问题-筛选条件")
-const keyBugSheet = Workbook.getSheet("重点问题")
+// sheet命名规则：系统-数据源/结果-sheet
+const zentSourceSheet = Workbook.getSheet('禅道Bug数据源')
+const jiraResultSheet = Workbook.getSheet('Jira重点Bug数据源')
+const zentConditionSheet = Workbook.getSheet("禅道重点问题-筛选条件")
+const allResultSheet = Workbook.getSheet("重点问题")
 // bug原始数据的列数
-const bugOriginColCount = 14;
-
-const bugFirstRow = bugSheet.getRange('1:1')
-const levelColumnIndex = bugFirstRow.find("严重程度").getColumn()
-const titleColumnIndex = bugFirstRow.find("Bug标题").getColumn()
-const keywordColumnIndex = bugFirstRow.find("关键词").getColumn()
-const creatDateColumnIndex = bugFirstRow.find("创建日期").getColumn()
+const zentSourceColCount = 15;
+// 禅道
+const zentSourceFirstRow = zentSourceSheet.getRange('1:1')
+const zentLevelColIndex = zentSourceFirstRow.find("严重程度").getColumn()
+const zentTitleColIndex = zentSourceFirstRow.find("Bug标题").getColumn()
+const zentKeywordColIndex = zentSourceFirstRow.find("关键词").getColumn()
+const zentCreatdateColIndex = zentSourceFirstRow.find("创建日期").getColumn()
+const zentSourceRowCount = zentSourceSheet.getRowCount();
 
 const newDataArray = [];
-const rowCount = bugSheet.getRowCount();
 const nowDate = new Date();
 const colorRed = "#fe0300";
 const colorOrange = "#fcc102";
 const colorYellow = "#feff00";
 
-// 清除筛选，才能读取到全部数据
-if (keyBugSheet.getFilter()) {
-    keyBugSheet.getFilter().delete();
+// 清除筛选，以便读取到全部数据
+if (allResultSheet.getFilter()) {
+    allResultSheet.getFilter().delete();
 }
-if (bugSheet.getFilter()) {
-    bugSheet.getFilter().delete();
+if (zentSourceSheet.getFilter()) {
+    zentSourceSheet.getFilter().delete();
 }
 
 // 给sheet添加筛选之前，先激活sheet。否则会报错"Cannot create a filter with other sheet's range"
-keyBugSheet.activate();
+allResultSheet.activate();
 // 在第1行重新添加筛选，方便脚本运行后自行筛选
-keyBugSheet.filter('1:1');
+allResultSheet.filter('1:1');
 
 // 添加筛选结果的标题行
-bugSheet.getRange(0, bugOriginColCount, 1, 4).setValues([
+zentSourceSheet.getRange(0, zentSourceColCount + 1, 1, 4).setValues([
     ["条件-严重程度", "条件-标题", "条件-关键词", "条件结果-或"],
 ]);
 
-// 轮询sourceSheet的每一行
-const bugRowCount = getNotNullRowCount(bugSheet);
+// 轮询zentSourceSheet的每一行
+const zentNotNullRowCount = getNotNullRowCount(zentSourceSheet);
 var isMatchKeyRules = false;
-for (let i = 1; i < bugRowCount; i++) {
+for (let i = 1; i < zentNotNullRowCount; i++) {
     // 匹配重点问题，并获取匹配结果
-    isMatchKeyRules = matchKeyRules(bugSheet, i);
+    isMatchKeyRules = matchKeyRules(zentSourceSheet, i);
 
-    // 若keyBugSheet中存在此BugId，则直接更新数据
-    const bugId = bugSheet.getRange(i, 0, 1, 1).getValue()
-    const findRange = keyBugSheet.getRange(0, 0, rowCount, 1).find(bugId.toString())
+    // 若allResultSheet中存在此BugId，则直接更新数据
+    const bugId = zentSourceSheet.getRange(i, 0, 1, 1).getValue()
+    const findRange = allResultSheet.getRange(0, 0, allResultSheet.getRowCount(), 1).find(bugId.toString())
     if (findRange) {
-        if (!isMatchKeyRules) {// 删除keyBugSheet中不符合重点问题条件的行
+        if (!isMatchKeyRules) {// 删除allResultSheet中不符合重点问题条件的行
             if (findRange.getRow() != 0) {// 第0行是标题行
-                keyBugSheet.deleteRow(findRange.getRow());
-                Output.log(`keyBugSheet delete row, bugId=${bugId}`)
+                allResultSheet.deleteRow(findRange.getRow());
+                Output.log(`allResultSheet delete row, bugId=${bugId}`)
             }
-        } else {// 更新keyBugSheet中符合重点问题条件的行
-            updateRow(bugSheet, i, keyBugSheet, findRange.getRow());
-            Output.log(`keyBugSheet update row, bugId=${bugId}`)
+        } else {// 更新allResultSheet中符合重点问题条件的行
+            updateRow(zentSourceSheet, i, allResultSheet, findRange.getRow());
+            Output.log(`allResultSheet update zentao row, bugId=${bugId}`)
         }
     } else {
         if (isMatchKeyRules) {
-            // 将一行数据暂存到数组
-            addRowToArray(bugSheet, i, keyBugSheet);
+            // 将allResultSheet中不存在的新数据保存到数组
+            addRowToArray(zentSourceSheet, i);
+            // Output.log(`added zentao new data, array = ${newDataArray}`)
         }
     }
 }
-// 将暂存的所有行追加到keyBugSheet
-appendArrayToSheet(keyBugSheet);
 
-// 轮询targetSheet的每一行
-var keyBugRowCount = getNotNullRowCount(keyBugSheet);
-for (let i = 1; i < keyBugRowCount; i++) {
-    // 添加存活时间颜色
-    addAliveColors(keyBugSheet, i);
+// 轮询keyBugJiraSheet每一行
+const jiraCount = getNotNullRowCount(jiraResultSheet);
+for (let i = 1; i < jiraCount; i++) {
+    // 若allResultSheet中存在此BugId，则直接更新数据
+    const bugId = jiraResultSheet.getRange(i, 0, 1, 1).getValue()
+    const findRange = allResultSheet.getRange(0, 0, allResultSheet.getRowCount(), 1).find(bugId.toString())
+    if (findRange) {
+        // 更新allResultSheet中符合重点问题条件的行
+        updateRow(jiraResultSheet, i, allResultSheet, findRange.getRow(), true);
+        Output.log(`allResultSheet update jira row, bugId=${bugId}`)
+    } else {
+        // 将allResultSheet中不存在的新数据保存到数组
+        addRowToArray(jiraResultSheet, i, true);
+        // Output.log(`added jira new data, array = ${newDataArray}`)
+    }
 }
 
-bugSheet.setRowsHeight(0, bugSheet.getRowCount(), 22);
-keyBugSheet.setRowsHeight(0, keyBugSheet.getRowCount(), 22);
+// 将暂存的所有行追加到allResultSheet
+appendArrayToSheet(allResultSheet);
+
+// 轮询allResultSheet的每一行
+// for (let i = 1; i < getNotNullRowCount(allResultSheet); i++) {
+//     // 添加存活时间颜色
+//     addAliveColors(allResultSheet, i);
+// }
+
+zentSourceSheet.setRowsHeight(0, zentSourceSheet.getRowCount(), 22);
+allResultSheet.setRowsHeight(0, allResultSheet.getRowCount(), 22);
 
 
 // -------------------------functions-------------------------
@@ -87,11 +107,23 @@ function appendArrayToSheet(targetSheet) {
     }
 }
 
-function addRowToArray(sourceSheet, sourceRowIndex) {
-    // 保存keyBugSheet中不存在的新数据
-    const rowData = sourceSheet.getRange(sourceRowIndex, 0, 1, bugOriginColCount).getValues()[0];
+function addRowToArray(sourceSheet, sourceRowIndex, isJira) {
+    // 获取一行的数据
+    const rowData = sourceSheet.getRange(sourceRowIndex, 0, 1, zentSourceColCount).getValues()[0];
+
+    if (isJira) {
+        // 调整column与allResultSheet结构一致
+        rowData[10] = rowData[6];
+        rowData[7] = rowData[5];
+        rowData[6] = rowData[4];
+        rowData[5] = rowData[3];
+        rowData[3] = rowData[2];
+        // 清空无效column
+        rowData[4] = '';
+        rowData[2] = '';
+    }
+
     newDataArray.push(rowData);
-    // Output.log(rowData)
 }
 
 // 添加重点问题规则的判定结果，并return
@@ -99,42 +131,42 @@ function matchKeyRules(sheet, index) {
     var result = false;
 
     // 严重程度
-    const levelValue = sheet.getRange(index, levelColumnIndex, 1, 1).getValue();
+    const levelValue = sheet.getRange(index, zentLevelColIndex, 1, 1).getValue();
     if (levelValue) {
-        const levelResult = sheet.getRange(index, levelColumnIndex, 1, 1).getValue() <= conditionSheet.getRange('A2').getValue()
-        sheet.getRange(index, bugOriginColCount, 1, 1).setValue(levelResult)
+        const levelResult = sheet.getRange(index, zentLevelColIndex, 1, 1).getValue() <= zentConditionSheet.getRange('A2').getValue()
+        sheet.getRange(index, zentSourceColCount + 1, 1, 1).setValue(levelResult)
         if (levelResult) result = true;
     } else {
-        sheet.getRange(index, bugOriginColCount, 1, 1).setValue(false)
+        sheet.getRange(index, zentSourceColCount + 1, 1, 1).setValue(false)
     }
     // 标题
-    const titleValue = sheet.getRange(index, titleColumnIndex, 1, 1).getValue()
+    const titleValue = sheet.getRange(index, zentTitleColIndex, 1, 1).getValue()
     if (titleValue) {
         var titleResult = false;
-        const titleCondition = conditionSheet.getRange('B2').getValue().toString().split("，");
+        const titleCondition = zentConditionSheet.getRange('B2').getValue().toString().split("，");
         if (titleCondition.find(item => titleValue.includes(item))) {
             titleResult = true;
         }
-        sheet.getRange(index, bugOriginColCount + 1, 1, 1).setValue(titleResult)
+        sheet.getRange(index, zentSourceColCount + 2, 1, 1).setValue(titleResult)
         if (titleResult) result = true;
     } else {
-        sheet.getRange(index, bugOriginColCount + 1, 1, 1).setValue(false)
+        sheet.getRange(index, zentSourceColCount + 2, 1, 1).setValue(false)
     }
     // 关键词
-    const keywordValue = sheet.getRange(index, keywordColumnIndex, 1, 1).getValue()
+    const keywordValue = sheet.getRange(index, zentKeywordColIndex, 1, 1).getValue()
     if (keywordValue) {
         var keywordResult = false;
-        const keywordCondition = conditionSheet.getRange('C2').getValue().toString().split("，");
+        const keywordCondition = zentConditionSheet.getRange('C2').getValue().toString().split("，");
         if (keywordCondition.find(item => keywordValue.includes(item))) {
             keywordResult = true;
         }
-        sheet.getRange(index, bugOriginColCount + 2, 1, 1).setValue(keywordResult)
+        sheet.getRange(index, zentSourceColCount + 3, 1, 1).setValue(keywordResult)
         if (keywordResult) result = true;
     } else {
-        sheet.getRange(index, bugOriginColCount + 2, 1, 1).setValue(false)
+        sheet.getRange(index, zentSourceColCount + 3, 1, 1).setValue(false)
     }
     // 记录最终判定结果
-    sheet.getRange(index, bugOriginColCount + 3, 1, 1).setValue(result)
+    sheet.getRange(index, zentSourceColCount + 4, 1, 1).setValue(result)
 
     return result;
 }
@@ -142,22 +174,22 @@ function matchKeyRules(sheet, index) {
 // 根据bug存活时间添加颜色
 function addAliveColors(sheet, index) {
     // 计算存活时间。空白行的日期为1970-01-01
-    const createDateValue = new Date(sheet.getRange(index, creatDateColumnIndex, 1, 1).getValue());
+    const createDateValue = new Date(sheet.getRange(index, zentCreatdateColIndex, 1, 1).getValue());
     const aliveDays = parseInt((nowDate - createDateValue) / (1000 * 60 * 60 * 24));
     // Output.log(`index=${index}, createDateValue=${createDateValue}, aliveDays=${aliveDays}`)
     if (aliveDays > 15) {
-        sheet.getRange(index, creatDateColumnIndex, 1, 1).setBackgroundColor(colorRed)
+        sheet.getRange(index, zentCreatdateColIndex, 1, 1).setBackgroundColor(colorRed)
     } else if (aliveDays > 10) {
-        sheet.getRange(index, creatDateColumnIndex, 1, 1).setBackgroundColor(colorOrange)
+        sheet.getRange(index, zentCreatdateColIndex, 1, 1).setBackgroundColor(colorOrange)
     } else if (aliveDays > 5) {
-        sheet.getRange(index, creatDateColumnIndex, 1, 1).setBackgroundColor(colorYellow)
+        sheet.getRange(index, zentCreatdateColIndex, 1, 1).setBackgroundColor(colorYellow)
     }
 }
 
 // 追加数据到空行
 function appendValues(values, targetSheet) {
     targetSheet.getRange(getNotNullRowCount(targetSheet), 0, values.length, values[0].length).setValues(values, { parseType: 'raw' })
-    Output.log(`共复制 ${values.length} 行数据到 "${keyBugSheet.getName()}"`);
+    Output.log(`共复制 ${values.length} 行数据到 "${allResultSheet.getName()}"`);
 }
 
 // 获取有效行的count，也是第一个空行的index
@@ -174,10 +206,30 @@ function getNotNullRowCount(sheet) {
 }
 
 // 将1行更新到指定行
-function updateRow(sourceSheet, sourceRowIndex, targetSheet, targetRowIndex) {
-    const targetRange = targetSheet.getRange(targetRowIndex, 0, 1, bugOriginColCount)
-    const sourceRange = sourceSheet.getRange(sourceRowIndex, 0, 1, bugOriginColCount)
-    targetRange.setValues(sourceRange.getValues(), { parseType: 'raw' })
+function updateRow(sourceSheet, sourceRowIndex, targetSheet, targetRowIndex, isJira) {
+    const targetRange = targetSheet.getRange(targetRowIndex, 0, 1, zentSourceColCount)
+    const sourceRange = sourceSheet.getRange(sourceRowIndex, 0, 1, zentSourceColCount)
+    if (isJira) {
+        // Output.log(`updateRow: sourceRange.getValues() = ${sourceRange.getValues()}`)
+        const rowData = sourceRange.getValues()[0];
+
+        const newArray = new Array(1);
+        newArray[0] = new Array(zentSourceColCount);
+        //调整column与allResultSheet结构一致
+        newArray[0][14] = "Jira";
+        newArray[0][10] = rowData[6];
+        newArray[0][7] = rowData[5];
+        newArray[0][6] = rowData[4];
+        newArray[0][5] = rowData[3];
+        newArray[0][3] = rowData[2];
+        newArray[0][1] = rowData[1];
+        newArray[0][0] = rowData[0];
+
+        targetRange.setValues(newArray, { parseType: 'raw' })
+    } else {
+        targetRange.setValues(sourceRange.getValues(), { parseType: 'raw' })
+    }
+
     // Output.log("updateRow: "+targetSheet.getName()+"->"+targetRowIndex)
 }
 
@@ -220,7 +272,7 @@ function printType(obj) {
 // // bugSheet.setActiveRange(rangeValue)
 // // Output.log(filter.getRange())
 // // Output.log(bugSheet.getActiveRangeList())
-// // keyBugSheet.getRange(rangeValue).setValues(bugSheet.getActiveRange().getValues())
+// // allResultSheet.getRange(rangeValue).setValues(bugSheet.getActiveRange().getValues())
 
 // const startRow = 0;
 
@@ -232,13 +284,13 @@ function printType(obj) {
 //         if(isNaN(bugIdValue)){
 //             continue;
 //         }
-//         const findRange = keyBugSheet.getRange(0, 0, rowCount, 1).find(bugIdValue.toString())
-//         // keyBugSheet中若第1列中存在此BugId，则直接更新到此行
+//         const findRange = allResultSheet.getRange(0, 0, rowCount, 1).find(bugIdValue.toString())
+//         // allResultSheet中若第1列中存在此BugId，则直接更新到此行
 //         if(findRange){
-//             updateRow(bugSheet, row, keyBugSheet, findRange.getRow());
+//             updateRow(bugSheet, row, allResultSheet, findRange.getRow());
 //             continue;
 //         }
-//         // 保存keyBugSheet中不存在的新数据
+//         // 保存allResultSheet中不存在的新数据
 //         const rowData = bugSheet.getRange(row, 0, 1, colCount).getValues()[0];
 //         // Output.log(rowData)
 //         filteredData.push(rowData);
