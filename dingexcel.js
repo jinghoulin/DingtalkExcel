@@ -3,7 +3,7 @@ const zentSourceSheet = Workbook.getSheet('禅道Bug数据源')
 const jiraResultSheet = Workbook.getSheet('Jira重点Bug数据源')
 const zentConditionSheet = Workbook.getSheet("禅道重点问题-筛选条件")
 const allResultSheet = Workbook.getSheet("重点问题")
-// bug原始数据的列数
+// bug原始数据的列数14列+1列空列（标记是禅道还是Jira）
 const zentSourceColCount = 15;
 // 禅道
 const zentSourceFirstRow = zentSourceSheet.getRange('1:1')
@@ -26,6 +26,9 @@ if (allResultSheet.getFilter()) {
 if (zentSourceSheet.getFilter()) {
     zentSourceSheet.getFilter().delete();
 }
+if (jiraResultSheet.getFilter()) {
+    jiraResultSheet.getFilter().delete();
+}
 
 // 给sheet添加筛选之前，先激活sheet。否则会报错"Cannot create a filter with other sheet's range"
 allResultSheet.activate();
@@ -33,7 +36,7 @@ allResultSheet.activate();
 allResultSheet.filter('1:1');
 
 // 添加筛选结果的标题行
-zentSourceSheet.getRange(0, zentSourceColCount + 1, 1, 4).setValues([
+zentSourceSheet.getRange(0, zentSourceColCount, 1, 4).setValues([
     ["条件-严重程度", "条件-标题", "条件-关键词", "条件结果-或"],
 ]);
 
@@ -93,6 +96,7 @@ appendArrayToSheet(allResultSheet);
 // }
 
 zentSourceSheet.setRowsHeight(0, zentSourceSheet.getRowCount(), 22);
+jiraResultSheet.setRowsHeight(0, jiraResultSheet.getRowCount(), 22);
 allResultSheet.setRowsHeight(0, allResultSheet.getRowCount(), 22);
 
 
@@ -112,6 +116,7 @@ function addRowToArray(sourceSheet, sourceRowIndex, isJira) {
     const rowData = sourceSheet.getRange(sourceRowIndex, 0, 1, zentSourceColCount).getValues()[0];
 
     if (isJira) {
+        rowData[14] = "Jira";
         // 调整column与allResultSheet结构一致
         rowData[10] = rowData[6];
         rowData[7] = rowData[5];
@@ -121,6 +126,8 @@ function addRowToArray(sourceSheet, sourceRowIndex, isJira) {
         // 清空无效column
         rowData[4] = '';
         rowData[2] = '';
+    } else {
+        rowData[14] = "禅道";
     }
 
     newDataArray.push(rowData);
@@ -134,10 +141,10 @@ function matchKeyRules(sheet, index) {
     const levelValue = sheet.getRange(index, zentLevelColIndex, 1, 1).getValue();
     if (levelValue) {
         const levelResult = sheet.getRange(index, zentLevelColIndex, 1, 1).getValue() <= zentConditionSheet.getRange('A2').getValue()
-        sheet.getRange(index, zentSourceColCount + 1, 1, 1).setValue(levelResult)
+        sheet.getRange(index, zentSourceColCount, 1, 1).setValue(levelResult)
         if (levelResult) result = true;
     } else {
-        sheet.getRange(index, zentSourceColCount + 1, 1, 1).setValue(false)
+        sheet.getRange(index, zentSourceColCount, 1, 1).setValue(false)
     }
     // 标题
     const titleValue = sheet.getRange(index, zentTitleColIndex, 1, 1).getValue()
@@ -147,10 +154,10 @@ function matchKeyRules(sheet, index) {
         if (titleCondition.find(item => titleValue.includes(item))) {
             titleResult = true;
         }
-        sheet.getRange(index, zentSourceColCount + 2, 1, 1).setValue(titleResult)
+        sheet.getRange(index, zentSourceColCount + 1, 1, 1).setValue(titleResult)
         if (titleResult) result = true;
     } else {
-        sheet.getRange(index, zentSourceColCount + 2, 1, 1).setValue(false)
+        sheet.getRange(index, zentSourceColCount + 1, 1, 1).setValue(false)
     }
     // 关键词
     const keywordValue = sheet.getRange(index, zentKeywordColIndex, 1, 1).getValue()
@@ -160,13 +167,13 @@ function matchKeyRules(sheet, index) {
         if (keywordCondition.find(item => keywordValue.includes(item))) {
             keywordResult = true;
         }
-        sheet.getRange(index, zentSourceColCount + 3, 1, 1).setValue(keywordResult)
+        sheet.getRange(index, zentSourceColCount + 2, 1, 1).setValue(keywordResult)
         if (keywordResult) result = true;
     } else {
-        sheet.getRange(index, zentSourceColCount + 3, 1, 1).setValue(false)
+        sheet.getRange(index, zentSourceColCount + 2, 1, 1).setValue(false)
     }
     // 记录最终判定结果
-    sheet.getRange(index, zentSourceColCount + 4, 1, 1).setValue(result)
+    sheet.getRange(index, zentSourceColCount + 3, 1, 1).setValue(result)
 
     return result;
 }
@@ -209,12 +216,12 @@ function getNotNullRowCount(sheet) {
 function updateRow(sourceSheet, sourceRowIndex, targetSheet, targetRowIndex, isJira) {
     const targetRange = targetSheet.getRange(targetRowIndex, 0, 1, zentSourceColCount)
     const sourceRange = sourceSheet.getRange(sourceRowIndex, 0, 1, zentSourceColCount)
+
+    const newArray = new Array(1);
+    newArray[0] = new Array(zentSourceColCount);
     if (isJira) {
         // Output.log(`updateRow: sourceRange.getValues() = ${sourceRange.getValues()}`)
         const rowData = sourceRange.getValues()[0];
-
-        const newArray = new Array(1);
-        newArray[0] = new Array(zentSourceColCount);
         //调整column与allResultSheet结构一致
         newArray[0][14] = "Jira";
         newArray[0][10] = rowData[6];
@@ -224,11 +231,11 @@ function updateRow(sourceSheet, sourceRowIndex, targetSheet, targetRowIndex, isJ
         newArray[0][3] = rowData[2];
         newArray[0][1] = rowData[1];
         newArray[0][0] = rowData[0];
-
-        targetRange.setValues(newArray, { parseType: 'raw' })
     } else {
-        targetRange.setValues(sourceRange.getValues(), { parseType: 'raw' })
+        newArray[0] = sourceRange.getValues()[0];
+        newArray[0][14] = "禅道";
     }
+    targetRange.setValues(newArray, { parseType: 'raw' })
 
     // Output.log("updateRow: "+targetSheet.getName()+"->"+targetRowIndex)
 }
